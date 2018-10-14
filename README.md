@@ -8,11 +8,11 @@ https://creativecommons.org/licenses/by-sa/4.0/legalcode
 ## Using Zbar to extract the barcode that's most prominent in a video
 
 ### Usage:
-#### * On Windows:
+#### - On Windows:
 ```
 python BarcodeFromVideo.py
 ```
-#### * On Linux:
+#### - On Linux:
 ```
 python3 BarcodeFromVideo.py
 ```
