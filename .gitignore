@@ -1,10 +1,8 @@
 
-not/
+\.vscode
 
-pyzbar/
+\__pycache__
 
-numpy/
+\.dist
 
-cv\.py
-
-cv2\.cp37-win32\.pyd
+\venv
