@@ -56,6 +56,7 @@ def catch_first_frame(camera):
     if camera.isOpened():
         rval, frame = camera.read()
     else:
+        stderr.write("Unable to open Camera")
         rval = False
     return rval, frame
 
