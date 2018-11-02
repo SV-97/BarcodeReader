@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 from pyzbar import pyzbar
 
-from lookuptable import VirtualKeyboard
+from virtualkeyboard import VirtualKeyboard
 from systemmetrics import SystemMetrics
 
 parser = ArgumentParser(description="Get barcode from video feed")
@@ -21,44 +21,56 @@ disable_abort = args.disable_abort
 mirror = args.mirror
 fullscreen = args.fullscreen
 
-def zbar_rect_correction(x,y,w,h):
-    return ((x, y), (x + w, y + h))
+
+def rect_transformation(x, y, width, height):
+    """Transform rectangle of type "origin + size" to "two-point"
+    Args:
+        x (int): x coordinate of origin
+        y (int): y coordinate of origin
+        width (int): width of rectangle
+        height (int): height of rectangle
+    Returns:
+        Tuple of tuple of int with x-y-coordinate pairs for both points
+    """
+    return ((x, y), (x + width, y + height))
+
+class CantOpenCameraException(Exception):
+    def __init__(self, camera_id):
+        super().__init__(self)
+        self.args[0] = f"Unable to open Camera {camera_id}"
 
 class Camera():
     """Context Manager for video streams
     """
-    def __init__(self, camera_id):
+    def __init__(self, camera_id=0):
         self.camera_id = camera_id
+
     def __enter__(self):
         self.camera = cv2.VideoCapture(self.camera_id)
+        if not self.camera.isOpened():
+            raise CantOpenCameraException(self.camera_id)
         return self.camera
+
     def __exit__(self, exc_type, exc_value, traceback):
         self.camera.release()
 
-def abort(event, x, y, flags, param):
+def abort(event=cv2.EVENT_LBUTTONDOWN, x=None, y=None, flags=None, param=None):
     if event == cv2.EVENT_LBUTTONDOWN:
-        global run
         stderr.write("Aborted")
         cv2.destroyAllWindows()
-        run = False
 
-def cv2_setup(window, disable_abort):
+def cv2_setup(window):
+    global disable_abort
     if fullscreen:
         cv2.namedWindow(window, cv2.WND_PROP_FULLSCREEN)
         cv2.setWindowProperty(window,cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
     else:
         cv2.namedWindow(window)
+        width, height = cv2.getWindowImageRect(window)[2:]
+        cv2.moveWindow(window, (SystemMetrics.screen_width - width) // 2, (SystemMetrics.screen_height - height) // 2)
     if not disable_abort:
         cv2.setMouseCallback(window, abort)
     return window
-
-def catch_first_frame(camera):
-    if camera.isOpened():
-        rval, frame = camera.read()
-    else:
-        stderr.write("Unable to open Camera")
-        rval = False
-    return rval, frame
 
 def find_and_mark_barcodes(frame, counter):
     barcodes = pyzbar.decode(frame)
@@ -73,15 +85,14 @@ def find_and_mark_barcodes(frame, counter):
         poly = np.asarray([(point.x, point.y) for point in poly])
         poly = poly.reshape((-1,1,2))
         cv2.polylines(frame, [poly] ,True, (0,255,0), 2)
-        cv2.rectangle(frame, *zbar_rect_correction(*barcode.rect), (255, 0, 0), 2)
+        cv2.rectangle(frame, *rect_transformation(*barcode.rect), (255, 0, 0), 2)
         x, y = barcode.rect[:2]
         cv2.putText(frame, "{}({})".format(*barcode_information), (x, y-10), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1)
     return frame, counter
 
 def main(window, camera):
-    run = True
     counter = []
-    while run:
+    while True:
         frame = camera.read()[1]
         marked_frame, counter = find_and_mark_barcodes(frame, counter)
         # marked_frame = cv2.resize(frame, (SystemMetrics.screen_width, SystemMetrics.screen_height))
@@ -91,11 +102,10 @@ def main(window, camera):
         key = cv2.waitKey(1)
 
         if cv2.getWindowProperty(window, 0) < 0: # prevent window reopening after closing via [x]
-            run = False
+            return
         if not disable_abort:
             if key == 27: # key 27 = esc
-                stderr.write("Aborted")
-                cv2.destroyAllWindows()
+                abort()
                 return
         
         if counter:
@@ -107,11 +117,12 @@ def main(window, camera):
                 VirtualKeyboard.print(str(code[0]))
                 return
 
-with Camera(camera_id) as camera:
+try:
     mirror = True
-    # fullscreen = True
-    window = cv2_setup("SV Barcode Reader", disable_abort)
-    reading_frame_successfull = catch_first_frame(camera)[0]
-    if reading_frame_successfull:
+    fullscreen = True
+    with Camera(camera_id) as camera:
+        window = cv2_setup("SV Barcode Reader")
         main(window, camera)
+except IOError as err:
+    stderr.write(err.args[0])
 cv2.destroyWindow(window)
