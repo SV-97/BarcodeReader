@@ -1,4 +1,6 @@
-#import pywin32
+"""To Do:
+    - Linux Version
+"""
 import win32api
 import win32con
 from time import sleep
